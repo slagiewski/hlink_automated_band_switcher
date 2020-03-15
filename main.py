@@ -6,13 +6,19 @@ from datetime import datetime
 from huawei_lte_api.Client import Client
 from huawei_lte_api.AuthorizedConnection import AuthorizedConnection
 from huawei_lte_api.Connection import Connection
+from huawei_lte_api.enums.device import AntennaTypeEnum
 
 ### Router Access Credentials ###
 ROUTER_IP = "192.168.1.1"
 ROUTER_PASSWORD = ""
 ### Router Access Credentials ###
 
-VALIDATION_SECOND_CHECK_DELAY_SECS = 15
+### Router Config Change Conditions  ###
+MIN_ACCEPTABLE_SPEED_MBITS = 1.3
+MIN_ACCEPTED_PING_MS = 350
+### Router Config Change Conditions  ###
+
+VALIDATION_SECOND_CHECK_DELAY_SECS = 10
 CONFIG_CHANGES_SAVE_WAIT_SECS = 5
 
 ONLY_4G_MODE = "03"
@@ -22,17 +28,15 @@ EU_LTE_BANDS_CODE = "20000800C5"
 ALL_SUPPORTED_3G_BANDS_CODE = "3FFFFFFF"
 
 NETWORK_CONFIGS = {
-    "4G B3 band": {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "4"},
-    "4G B7 band": {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "40"},
-    "4G B20 band": {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "80000"},
-    "4G B3+B7 band": {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "44"},
-    "4G B3+B20 band": {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "80004"},
-    "4G B7+B20 band": {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "80040"},
-    "3G": {"network_mode": ONLY_3G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": EU_LTE_BANDS_CODE}
+    "4G B3+B7 band":    {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "44",               "antenna_type": AntennaTypeEnum.EXTERNAL_1_AND_2},
+    "4G B3+B20 band":   {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "80004",            "antenna_type": AntennaTypeEnum.EXTERNAL_1_AND_2},
+    "4G B7+B20 band":   {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "80040",            "antenna_type": AntennaTypeEnum.EXTERNAL_1_AND_2},
+    "3G":               {"network_mode": ONLY_3G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": EU_LTE_BANDS_CODE,  "antenna_type": AntennaTypeEnum.EXTERNAL_1_AND_2},
+    "3G":               {"network_mode": ONLY_3G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": EU_LTE_BANDS_CODE,  "antenna_type": AntennaTypeEnum.INTEGRATED},
+    "4G B3 band":       {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "4",                "antenna_type": AntennaTypeEnum.EXTERNAL_1_AND_2},
+    "4G B7 band":       {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "40",               "antenna_type": AntennaTypeEnum.EXTERNAL_1_AND_2},
+    "4G B20 band":      {"network_mode": ONLY_4G_MODE, "network_band": ALL_SUPPORTED_3G_BANDS_CODE, "lte_band": "80000",            "antenna_type": AntennaTypeEnum.EXTERNAL_1_AND_2},
 }
-
-MIN_ACCEPTABLE_SPEED_MBITS = 1.5
-MIN_ACCEPTED_PING_MS = 350
 
 
 def __test_download_speed():
@@ -78,16 +82,29 @@ def download_speed_valid():
     return (False, download_Mbits, ping)
 
 
+def set_router_antenna_config(client, antenna_type):
+    current_antena_type = client.device.get_antenna_settings()[
+        'antenna_type']
+
+    if current_antena_type != antenna_type:
+        print("Changing antenna type...")
+        client.device.set_antenna_settings(antenna_type)
+        time.sleep(5)
+    else:
+        print("Antenna type is OK!")
+
+
 def change_router_config(config_name, network_band_config):
     print(f"Switching to [{config_name}] config...")
-    network_mode = network_band_config['network_mode']
-    network_band = network_band_config['network_band']
-    lte_band = network_band_config['lte_band']
+    ((_, network_mode), (_, network_band), (_, lte_band),
+     (_, antenna_type)) = network_band_config.items()
     connection = AuthorizedConnection(
         f'http://admin:{ROUTER_PASSWORD}@{ROUTER_IP}/')
     client = Client(connection)
-
     print(f"Connected to: {client.device.information()['DeviceName']} router.")
+
+    set_router_antenna_config(client, antenna_type)
+
     router_response = client.net.set_net_mode(
         lte_band, network_band, network_mode)
     print(
@@ -112,11 +129,14 @@ def change_router_config_to_best_config_of_invalid(best_config_of_invalid):
     change_router_config(
         best_config_of_invalid['name'], NETWORK_CONFIGS[best_config_of_invalid['name']])
 
+
 def print_log_entry_separator():
     print("\n\n\n")
 
+
 def current_datetime():
     return f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}]\n"
+
 
 def main():
     print_log_entry_separator()
@@ -138,6 +158,7 @@ def main():
             best_config_of_invalid, config_name, result_Mbits)
     else:
         change_router_config_to_best_config_of_invalid(best_config_of_invalid)
+
 
 if __name__ == "__main__":
     main()
